@@ -1,0 +1,14 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createEditor,run,press,expirePending} from '../lib/engine.ts';
+const text=(s:ReturnType<typeof createEditor>)=>s.files[s.file];
+test('insert is one undo block, with redo and correct Escape cursor',()=>{const s=run(createEditor('name'),'iuser_<Esc>');assert.equal(text(s),'user_name');assert.equal(s.cursor.col,4);assert.equal(text(run(s,'u')),'name');assert.equal(text(run(run(s,'u'),'<C-r>')),'user_name');});
+test('operators, counts and motions change actual text',()=>{assert.equal(text(run(createEditor('one two three'),'2dw')),'three');assert.equal(text(run(createEditor('one\ntwo\nthree'),'2dd')),'three');assert.equal(text(run(createEditor('one two'),'ciwAda<Esc>')),'Ada two');});
+test('inner quote and balanced nested text objects',()=>{assert.equal(text(run(createEditor('const x = "old";','src/app.ts',{row:0,col:12}),'ci"new<Esc>')),'const x = "new";');assert.equal(text(run(createEditor('f(a, g(b))','src/app.ts',{row:0,col:2}),'di(')),'f()');});
+test('visual line editing and comment work on selection',()=>{assert.equal(text(run(createEditor('a\nb\nc'),'Vjd')),'c');assert.equal(text(run(createEditor('a\nb\nc'),'Vjgc')),'// a\n// b\nc');});
+test('autopairs close and skip existing closing characters',()=>{assert.equal(text(run(createEditor(''),'iconsole.log("ok");<Esc>')),'console.log("ok");');});
+test('leader timeout expires and valid sequences open correct mock',()=>{const start=press(createEditor(),'\\',100);assert.equal(expirePending(start,1100).pending,'');assert.equal(press(start,'f',1200).panel,null);assert.equal(run(createEditor(),'\\ff').panel,'files');assert.equal(run(createEditor(),'\\xd').panel,'document');});
+test('NvimTree H/L override buffer navigation only while focused',()=>{const s=run(createEditor(),'\\eH');assert.equal(s.file,'src/app.ts');assert.equal(s.hidden,true);assert.equal(run(createEditor(),'L').file,'src/greet.ts');});
+test('surround add, change and delete retain contents',()=>{assert.equal(text(run(createEditor('name'),'ysiw]')),'[name]');assert.equal(text(run(createEditor('"name"','src/app.ts',{row:0,col:2}),'cs"\'')),"'name'");assert.equal(text(run(createEditor('"name"','src/app.ts',{row:0,col:2}),'ds"')),'name');});
+test('Telescope fuzzy selection navigates to selected file',()=>{const s=run(createEditor(),'\\ffgreet<CR>');assert.equal(s.file,'src/greet.ts');});
+test('LSP rename applies across the fake project and is undoable',()=>{const s=run(createEditor(undefined,undefined,{row:3,col:18}),'\\rnwelcome<CR>');assert.ok(s.files['src/greet.ts'].includes('welcome'));assert.ok(run(s,'u').files['src/greet.ts'].includes('greet'));});
