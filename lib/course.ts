@@ -1,0 +1,29 @@
+import type { EditorState, Pos } from './engine';
+export type Question = {kind:'keys'|'choice'|'fill';prompt:string;answer:string;options?:string[];explanation:string};
+export type Task = {prompt:string;initial:string;target:string;file:string;cursor?:Pos;optimal:string;requiredEvents?:string[];targetFile?:string};
+export type Section = {id:string;title:string;subtitle:string;minutes:number;body:string[];keys:string[];note:string;demo:Task;questions:Question[];task:Task};
+export type Unit = {id:string;title:string;description:string;icon:string;sections:Section[];review:Task};
+const task=(initial:string,target:string,optimal:string,prompt:string,cursor?:Pos,file='src/app.ts'):Task=>({initial,target,optimal,prompt,cursor,file});
+export const units:Unit[]=[{
+ id:'foundations',title:'Make yourself at home',description:'Modes, movement, and your first confident edits.',icon:'keyboard',sections:[{
+ id:'modes',title:'Think in modes',subtitle:'A few keys. A different way to edit.',minutes:6,
+ body:['In Normal mode, keys are instructions. Press i to insert text before the cursor, then Escape to return to Normal. Watch the mode label: it always tells you what the next key will do.','Your config uses absolute line numbers, a highlighted cursor line, and four spaces per tab. The editor below keeps your Catppuccin Frappé colors. Click inside it before typing.'],keys:['i','a','<Esc>'],note:'i, a, and Escape are built-in Neovim commands. They do not appear in :map because they are not custom mappings.',
+ demo:task('const name = "Ada";','// const name = "Ada";','i// <Esc>','Insert a comment marker before the line.'),
+ questions:[{kind:'keys',prompt:'Press the key that enters Insert mode before the cursor.',answer:'i',explanation:'i inserts before the cursor. a inserts after it.'},{kind:'choice',prompt:'What does Escape do while you are inserting text?',answer:'Return to Normal mode',options:['Save the file','Return to Normal mode','Delete the line'],explanation:'Escape changes mode; it does not save.'},{kind:'fill',prompt:'Complete the sequence: enter Insert, type Hi, return to Normal.',answer:'iHi<Esc>',explanation:'i starts the insertion and <Esc> finishes it.'}],
+ task:task('const enabled = true;','// const enabled = true;','i// <Esc>','Temporarily disable this feature flag by adding // and a space at the start. Finish in Normal mode.'),
+ },{
+ id:'movement',title:'Move with purpose',subtitle:'Reach the change before you make it.',minutes:7,
+ body:['Use h and l to move left and right; j and k move down and up. A count repeats the motion: 2j moves down two lines. w moves to the start of the next word; b moves back.','0 reaches the first column and $ the last character. gg goes to the first line; G goes to the last. In your config, uppercase H and L switch buffers, so do not treat them as screen-position motions.'],keys:['h','j','k','l','w','b','0','$','gg','G'],note:'Movement is built in. Uppercase H/L are your BufferLine remaps; lowercase h/l still move the cursor.',
+ demo:task('const first = 1;\nconst second = 2;\nconst third = 3;','const first = 1;\nconst second = 2;\nconst third = 3;','2j0w','Move two lines down, then to the next word.'),
+ questions:[{kind:'keys',prompt:'Move down two lines using a count.',answer:'2j',explanation:'Put the count before the motion.'},{kind:'choice',prompt:'What does uppercase L do in your editing buffer?',answer:'Switch to the next buffer',options:['Move one character right','Switch to the next buffer','Move to the last visible line'],explanation:'Your keymaps.lua maps <S-l> to BufferLineCycleNext.'},{kind:'fill',prompt:'Enter the sequence for the first line, then its first column.',answer:'gg0',explanation:'gg reaches line one; 0 reaches column one.'}],
+ task:task('const enabled = true;\nconst debug = true;\nexport { enabled };','const enabled = true;\n// const debug = true;\nexport { enabled };','ji// <Esc>','Comment out only the debug declaration. Keep the other lines unchanged.'),
+ },{
+ id:'recovery',title:'Edit, undo, keep going',subtitle:'Make small changes with a safety net.',minutes:6,
+ body:['x deletes the character under the cursor. u undoes the last edit; Ctrl+r restores an undone edit. A stretch of Insert-mode typing is one undo step, so Escape gives your changes a useful boundary.','Your Ctrl+s, Alt+s, and Command+s mappings format and save in Normal, Insert, and Visual mode. :w only writes. This course simulates a save locally; it never changes files on your computer.'],keys:['x','u','<C-r>','<C-s>',':w<CR>'],note:'In this bounded mock, format/save trims trailing whitespace. Your actual setup prefers Conform, falls back to LSP formatting, then writes.',
+ demo:task('const count = 10;;','const count = 10;','$xu<C-r>','Remove the extra semicolon, undo, then redo.'),
+ questions:[{kind:'keys',prompt:'Undo the last edit.',answer:'u',explanation:'u undoes one edit block.'},{kind:'choice',prompt:'Which action does your Ctrl+s mapping perform?',answer:'Format, then save',options:['Save without formatting','Format, then save','Open Telescope'],explanation:'format_and_save prefers Conform with an LSP fallback.'},{kind:'fill',prompt:'Enter the redo key using angle-bracket notation.',answer:'<C-r>',explanation:'Ctrl+r redoes a change that u undid.'}],
+ task:{...task('const total = 42;;','const total = 42;','$x<C-s>','Remove the extra semicolon and format/save the file.'),requiredEvents:['format-save']},
+ }],review:task('const ready = true;\nconst total = 42;;','const ready = true;\nconst total = 42;','j$x','Fix the extra semicolon on line 2, keeping the first line intact. Finish in Normal mode.')
+}];
+export function taskPassed(state:EditorState,t:Task){return state.mode==='normal'&&state.files[t.file]===t.target&&(!t.targetFile||state.file===t.targetFile)&&(!t.requiredEvents||t.requiredEvents.every(e=>state.events.includes(e)));}
+export const allSections=()=>units.flatMap(u=>u.sections);

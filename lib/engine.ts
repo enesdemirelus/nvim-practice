@@ -5,7 +5,7 @@ export type Panel = 'files' | 'grep' | 'buffers' | 'help' | 'hover' | 'reference
 export type Snapshot = { files: Record<string,string>; file: string; cursor: Pos };
 export type EditorState = Snapshot & {
   mode: Mode; pending: string; lastKeyAt: number; anchor: Pos | null; history: Snapshot[]; future: Snapshot[];
-  panel: Panel; query: string; selected: number; tree: boolean; treeFocus: boolean; hidden: boolean; clean: boolean;
+  panel: Panel; query: string; selected: number; tree: boolean; treeFocus: boolean; hidden: boolean; grouped: boolean;
   command: string; message: string; keys: number; log: string[]; events: string[]; saved: boolean; insertStart: Snapshot | null;
 };
 export const project: Record<string,string> = {
@@ -13,6 +13,7 @@ export const project: Record<string,string> = {
   'src/greet.ts': 'export function greet(name: string) {\n    return `Hello, ${name}`;\n}',
   'scripts/report.py': 'def summarize(items):\n    total = len(items)\n    return total\n\nprint(summarize([1, 2, 3]))',
   'lua/settings.lua': 'local settings = {}\nsettings.theme = "frappe"\nsettings.tabstop = 4\nreturn settings',
+  'src/lib/utils/format.ts': 'export const format = (value: number) => value.toFixed(2);',
   '.env.example': 'APP_NAME=practice',
 };
 export const customMaps: Record<string, { label: string; source: string; context: string }> = {
@@ -47,7 +48,7 @@ export const customMaps: Record<string, { label: string; source: string; context
   '[d': {label:'Previous diagnostic',source:':map · Neovim default',context:'Normal'},
 };
 export function createEditor(text = project['src/app.ts'], file = 'src/app.ts', cursor: Pos = {row:0,col:0}): EditorState {
- return { files:{...project,[file]:text},file,cursor:{...cursor},mode:'normal',pending:'',lastKeyAt:0,anchor:null,history:[],future:[],panel:null,query:'',selected:0,tree:false,treeFocus:false,hidden:false,clean:false,command:'',message:'Click here, then use your keyboard',keys:0,log:[],events:[],saved:false,insertStart:null };
+ return { files:{...project,[file]:text},file,cursor:{...cursor},mode:'normal',pending:'',lastKeyAt:0,anchor:null,history:[],future:[],panel:null,query:'',selected:0,tree:false,treeFocus:false,hidden:false,grouped:true,command:'',message:'Click here, then use your keyboard',keys:0,log:[],events:[],saved:false,insertStart:null };
 }
 export const lines = (s: EditorState) => s.files[s.file].split('\n');
 export const snapshot = (s: EditorState): Snapshot => ({ files:{...s.files},file:s.file,cursor:{...s.cursor} });
@@ -59,7 +60,7 @@ function position(s:EditorState,n:number):Pos {const t=s.files[s.file];n=Math.ma
 function replace(s:EditorState,start:number,end:number,value:string) {const t=s.files[s.file];s.files[s.file]=t.slice(0,start)+value+t.slice(end);s.cursor=position(s,start+value.length);clamp(s);}
 function beginInsert(s:EditorState,alreadySaved=false) { if(!alreadySaved) checkpoint(s);s.mode='insert';s.insertStart=snapshot(s); }
 function record(s:EditorState,event:string) {s.events.push(event);s.message=event;}
-export function visibleFiles(s:EditorState) { return Object.keys(s.files).filter(f=>(!s.hidden||!f.startsWith('.'))&&(!s.clean||f===s.file)); }
+export function visibleFiles(s:EditorState) { return Object.keys(s.files).filter(f=>(!s.hidden||!f.startsWith('.'))); }
 export function panelItems(s:EditorState):string[] {
  const q=s.query.toLowerCase();
  if(s.panel==='grep') return Object.entries(s.files).flatMap(([f,t])=>t.split('\n').flatMap((l,i)=>l.toLowerCase().includes(q)?[`${f}:${i+1}  ${l.trim()}`]:[]));
@@ -126,7 +127,7 @@ export function press(initial:EditorState,key:string,now=Date.now()):EditorState
  }
  if(s.mode==='command') {if(key==='<CR>'){if(s.command==='w'){s.saved=true;record(s,'write');s.message='Written · :w does not format';}else s.message=`:${s.command} is outside this course`;s.mode='normal';s.command='';}else if(key==='<BS>')s.command=s.command.slice(0,-1);else if(key.length===1)s.command+=key;return s;}
  // Buffer-local tree mappings take precedence over global H/L.
- if(s.treeFocus&&!s.pending&&key!=='\\') {const fs=visibleFiles(s);if(key==='H'){s.hidden=!s.hidden;record(s,'tree:hidden');}else if(key==='L'){s.clean=!s.clean;record(s,'tree:clean');}else if(key==='j')s.selected=Math.min(fs.length-1,s.selected+1);else if(key==='k')s.selected=Math.max(0,s.selected-1);else if(key==='<CR>'&&fs[s.selected])navigate(s,fs[s.selected]);else s.message='Explorer has focus. H hides dotfiles; L filters Git-clean files.';return s;}
+ if(s.treeFocus&&!s.pending&&key!=='\\') {const fs=visibleFiles(s);if(key==='H'){s.hidden=!s.hidden;record(s,'tree:hidden');}else if(key==='L'){s.grouped=!s.grouped;record(s,'tree:group');}else if(key==='j')s.selected=Math.min(fs.length-1,s.selected+1);else if(key==='k')s.selected=Math.max(0,s.selected-1);else if(key==='<CR>'&&fs[s.selected])navigate(s,fs[s.selected]);else s.message='Explorer has focus. H hides dotfiles; L toggles grouped empty directories.';return s;}
  const seq=s.pending+key;const maps:Record<string,()=>void>={
   '\\e':()=>{s.tree=!s.tree;s.treeFocus=s.tree;s.selected=0;record(s,'tree:toggle');},'\\o':()=>{s.tree=true;s.treeFocus=true;s.selected=0;record(s,'tree:focus');},
   '\\ff':()=>open(s,'files'),'\\fg':()=>open(s,'grep'),'\\fb':()=>open(s,'buffers'),'\\fh':()=>open(s,'help'),
